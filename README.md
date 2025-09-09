@@ -15,7 +15,7 @@ Outcomes
 
 ## Features
 
-- **Verify**: Check if a file has a valid Authenticode signature (structural only).
+- **Verify**: Check if a file has a valid Authenticode signature. If the file was tampered with after signing, this will return false since the digital signature is no longer valid.
 - **VerifyFull**: Validate both the signature and the signing certificate chain.
 - **Custom Policy**: Supply your own `X509Chain` policy for revocation checks, extra roots, etc.
 - **Thread-safe** and dependency-free (just P/Invoke to `wintrust.dll`).
@@ -42,20 +42,11 @@ Install-Package WinTrustSharp
 using System.IO;
 using WinTrustSharp;
 
-// Structural signature check only
-bool ok = Authenticode.Verify(new FileInfo("SomeLibrary.dll"));
+// Digital signature check only
+bool validDigitalSignature = Authenticode.Verify(new FileInfo("SomeLibrary.dll"));
 
 // Full validation (certificate trust + signature structure)
-bool trusted;
-try
-{
-    trusted = Authenticode.VerifyFull("SomeLibrary.dll");
-}
-catch (CryptographicException)
-{
-    // File is not Authenticode signed
-    trusted = false;
-}
+bool trusted = Authenticode.VerifyFull("SomeLibrary.dll");
 ```
 
 ## Custom certificate validation

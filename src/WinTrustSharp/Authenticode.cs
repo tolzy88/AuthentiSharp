@@ -20,9 +20,9 @@ namespace WinTrustSharp
     /// <para>These APIs ultimately invoke the native WinVerifyTrust infrastructure (via <c>wintrust.dll</c>)
     /// to determine signature validity. They are only meaningful on Windows; use-site guards are recommended
     /// if your library/app can execute on non-Windows platforms.</para>
-    /// <para>No exceptions are thrown for an invalid or untrusted signature; the methods simply return <c>false</c>.
-    /// A <see cref="CryptographicException"/> is thrown only when the target file is not Authenticode signed at all
-    /// (i.e. no embedded signature is present) during the certificate extraction phase of the <c>VerifyFull</c> methods.</para>
+    /// <para>No exceptions are thrown for an invalid, untrusted, or unsigned file; all such cases yield <c>false</c>.
+    /// (An unsigned file is treated the same as a structurally or trust-invalid signature.) A <see cref="CryptographicException"/>
+    /// may be raised internally while attempting to extract the signing certificate, but public APIs catch it and return <c>false</c>.</para>
     /// <para>The methods are thread-safe and impose no mutable shared state.</para>
     /// </remarks>
     /// <example>
@@ -50,7 +50,7 @@ namespace WinTrustSharp
         /// <remarks>
         /// <para>This does NOT perform certificate chain or revocation validation. It only verifies the
         /// embedded signature blob (hash/content) via WinVerifyTrust with minimal policy flags.</para>
-        /// <para>If the file is completely unsigned, this method returns <c>false</c> rather than throwing.</para>
+        /// <para>If the file is unsigned or the signature is invalid, this method returns <c>false</c>.</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Verify(FileInfo file) =>
@@ -66,13 +66,10 @@ namespace WinTrustSharp
         /// <c>true</c> if the file is Authenticode signed, the signing certificate passes
         /// <see cref="X509Certificate2.Verify()"/> basic checks, and the signature itself is valid; otherwise <c>false</c>.
         /// </returns>
-        /// <exception cref="CryptographicException">
-        /// Thrown if the file is not Authenticode signed (no embedded signature to extract).
-        /// </exception>
         /// <remarks>
         /// <para>No revocation configuration is explicitly applied; platform defaults are used by
         /// <see cref="X509Certificate2.Verify()"/>.</para>
-        /// <para>Failure of certificate trust or signature validity yields <c>false</c>, not an exception.</para>
+        /// <para>Unsigned files, certificate trust failures, or signature invalidity all return <c>false</c>; no exception is propagated.</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool VerifyFull(FileInfo file)
@@ -87,19 +84,24 @@ namespace WinTrustSharp
         /// <c>true</c> if the file is signed, the certificate passes basic trust validation, and the signature is valid;
         /// otherwise <c>false</c>.
         /// </returns>
-        /// <exception cref="CryptographicException">
-        /// Thrown if the file is not Authenticode signed (no embedded signature present).
-        /// </exception>
         /// <remarks>
         /// <para>Chain building nuances (revocation mode, extra stores, etc.) are not controlled here; for advanced
         /// scenarios use the overload that accepts a validation callback.</para>
+        /// <para>Returns <c>false</c> for unsigned files or any trust/signature failures.</para>
         /// </remarks>
         public static bool VerifyFull(string filePath)
         {
-            using (var cert = LoadAuthenticodeCertificate(filePath))
+            try
             {
-                if (!cert.Verify())
-                    return false;
+                using (var cert = LoadAuthenticodeCertificate(filePath))
+                {
+                    if (!cert.Verify())
+                        return false;
+                }
+            }
+            catch (CryptographicException)
+            {
+                return false;
             }
             return WinTrustInternal.VerifyAuthenticode(filePath);
         }
@@ -116,8 +118,8 @@ namespace WinTrustSharp
         /// <returns>
         /// <c>true</c> only if the callback returns <c>true</c> and the signature validation succeeds; otherwise <c>false</c>.
         /// </returns>
-        /// <exception cref="CryptographicException">The file is not Authenticode signed.</exception>
         /// <remarks>
+        /// <para>Unsigned files or failures during certificate extraction cause the method to return <c>false</c>.</para>
         /// <para>Use this overload to implement custom chain policies (revocation flags, additional trust anchors, etc.).</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -136,17 +138,24 @@ namespace WinTrustSharp
         /// <returns>
         /// <c>true</c> if the callback approves the certificate/chain AND the Authenticode signature is valid; otherwise <c>false</c>.
         /// </returns>
-        /// <exception cref="CryptographicException">The file is not Authenticode signed.</exception>
         /// <remarks>
         /// <para>The chain object is created per invocation; customize <see cref="X509Chain.ChainPolicy"/> inside the callback.</para>
+        /// <para>Returns <c>false</c> if the file is unsigned, certificate extraction fails, the callback rejects the certificate, or the signature is invalid.</para>
         /// </remarks>
         public static bool VerifyFull(string filePath, Func<X509Certificate2, X509Chain, bool> isCertValid)
         {
-            using (var cert = LoadAuthenticodeCertificate(filePath))
-            using (var chain = new X509Chain())
+            try
             {
-                if (!isCertValid(cert, chain))
-                    return false;
+                using (var cert = LoadAuthenticodeCertificate(filePath))
+                using (var chain = new X509Chain())
+                {
+                    if (!isCertValid(cert, chain))
+                        return false;
+                }
+            }
+            catch (CryptographicException)
+            {
+                return false;
             }
             return WinTrustInternal.VerifyAuthenticode(filePath);
         }
@@ -158,8 +167,11 @@ namespace WinTrustSharp
         /// <param name="file">The path to the file from which to extract the certificate.</param>
         /// <returns>The extracted <see cref="X509Certificate2"/>.</returns>
         /// <exception cref="CryptographicException">Thrown when the file is not Authenticode signed.</exception>
+        /// <exception cref="FileNotFoundException">File does not exist.</exception>
         private static X509Certificate2 LoadAuthenticodeCertificate(string file)
         {
+            if (!File.Exists(file))
+                throw new FileNotFoundException("The specified file was not found.", file);
             if (X509Certificate2.GetCertContentType(file) == X509ContentType.Authenticode)
             {
 #pragma warning disable SYSLIB0057

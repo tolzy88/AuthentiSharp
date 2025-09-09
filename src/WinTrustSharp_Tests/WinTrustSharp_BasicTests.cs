@@ -4,18 +4,17 @@
 //
 // Copyright (C) 2025 Steven Tolzmann
 
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using WinTrustSharp;
-
 
 namespace WinTrustSharp_Tests
 {
     public class WinTrustSharp_BasicTests
     {
-        private const string ValidFileName = @"TestFiles\wintrust_VALID.dll";          // Signed & valid
-        private const string InvalidFileName = @"TestFiles\wintrust_INVALID.dll";      // Signed but tampered/invalid signature
-        private const string NoCertFileName = @"TestFiles\HelloWorld_NOCERT.dll";      // Completely unsigned
+        private const string ValidFileName = @"TestFiles\wintrust_VALID.dll";           // Signed & valid
+        private const string InvalidFileName = @"TestFiles\wintrust_INVALID.dll";       // Signed but tampered/invalid signature
+        private const string NoCertFileName = @"TestFiles\HelloWorld_NOCERT.dll";       // Completely unsigned
+        private const string MissingFileName = @"TestFiles\missing_does_not_exist.dll"; // Intentionally absent
 
         [Fact]
         public void TestEnvironment_WindowsOnly()
@@ -96,15 +95,40 @@ namespace WinTrustSharp_Tests
         }
 
         [Fact]
-        public void VerifyFull_NoCertFile_ThrowsCryptographicException()
+        public void VerifyFull_NoCertFile_ReturnsFalse()
         {
-            Assert.Throws<CryptographicException>(() => Authenticode.VerifyFull(NoCertFileName));
+            // Unsigned => public API now returns false instead of throwing.
+            bool result = Authenticode.VerifyFull(NoCertFileName);
+            Assert.False(result);
         }
 
         [Fact]
-        public void VerifyFull_Callback_NoCertFile_ThrowsCryptographicException()
+        public void VerifyFull_Callback_NoCertFile_ReturnsFalse_CallbackNotInvoked()
         {
-            Assert.Throws<CryptographicException>(() => Authenticode.VerifyFull(NoCertFileName));
+            bool callbackInvoked = false;
+            bool result = Authenticode.VerifyFull(NoCertFileName, (cert, chain) =>
+            {
+                callbackInvoked = true; // Should not happen for unsigned file.
+                return true;
+            });
+
+            Assert.False(callbackInvoked);
+            Assert.False(result);
+        }
+
+        // MISSING FILE TESTS (FileNotFoundException should propagate) ---------
+
+        [Fact]
+        public void VerifyFull_MissingFile_ThrowsFileNotFoundException()
+        {
+            Assert.Throws<FileNotFoundException>(() => Authenticode.VerifyFull(MissingFileName));
+        }
+
+        [Fact]
+        public void VerifyFull_Callback_MissingFile_ThrowsFileNotFoundException()
+        {
+            Assert.Throws<FileNotFoundException>(() =>
+                Authenticode.VerifyFull(MissingFileName, (_, _) => true));
         }
     }
 }

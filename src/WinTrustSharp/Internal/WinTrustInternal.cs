@@ -50,6 +50,7 @@ namespace WinTrustSharp.Internal
             }
             finally
             {
+                Marshal.DestroyStructure<WINTRUST_FILE_INFO>(pFileInfo);
                 Marshal.FreeHGlobal(pFileInfo);
             }
         }
