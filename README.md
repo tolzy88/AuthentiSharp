@@ -4,11 +4,11 @@ Lightweight .NET interop for validating Windows Authenticode (code-signing) sign
 
 ```
 WinTrustSharp_Tests
-  Tests in group: 11
-   Total Duration: 38 ms
+  Tests in group: 13
+   Total Duration: 41 ms
 
 Outcomes
-   11 Passed
+   13 Passed
 ```
 
 ---
