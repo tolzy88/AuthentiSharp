@@ -1,23 +1,21 @@
-using System;
-using System.IO;
+//
+// Authors:
+//   Steven Tolzmann
+//
+// Copyright (C) 2025 Steven Tolzmann
+
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using WinTrustSharp;
-using Xunit;
+
 
 namespace WinTrustSharp_Tests
 {
     public class WinTrustSharp_BasicTests
     {
-        private const string ValidFileName = "wintrust_VALID.dll";          // Signed & valid
-        private const string InvalidFileName = "wintrust_INVALID.dll";      // Signed but not trusted / invalid
-        private const string NoCertFileName = "HelloWorld_NOCERT.dll";      // Completely unsigned
-
-        private static string GetTestFile(string fileName)
-            => Path.Combine(AppContext.BaseDirectory, "TestFiles", fileName);
-
-        private static void EnsureExists(string path)
-            => Assert.True(File.Exists(path), $"Test file not found: {path}");
+        private const string ValidFileName = @"TestFiles\wintrust_VALID.dll";          // Signed & valid
+        private const string InvalidFileName = @"TestFiles\wintrust_INVALID.dll";      // Signed but tampered/invalid signature
+        private const string NoCertFileName = @"TestFiles\HelloWorld_NOCERT.dll";      // Completely unsigned
 
         [Fact]
         public void TestEnvironment_WindowsOnly()
@@ -30,28 +28,19 @@ namespace WinTrustSharp_Tests
         [Fact]
         public void Verify_ValidFile_ReturnsTrue()
         {
-            var path = GetTestFile(ValidFileName);
-            EnsureExists(path);
-
-            Assert.True(Authenticode.Verify(new FileInfo(path)));
+            Assert.True(Authenticode.Verify(new FileInfo(ValidFileName)));
         }
 
         [Fact]
         public void VerifyFull_ValidFile_ReturnsTrue()
         {
-            var path = GetTestFile(ValidFileName);
-            EnsureExists(path);
-
-            Assert.True(Authenticode.VerifyFull(path));
+            Assert.True(Authenticode.VerifyFull(ValidFileName));
         }
 
         [Fact]
         public void VerifyFull_Callback_ValidFile_ReturnsTrue()
         {
-            var path = GetTestFile(ValidFileName);
-            EnsureExists(path);
-
-            bool result = Authenticode.VerifyFull(path, (cert, chain) =>
+            bool result = Authenticode.VerifyFull(ValidFileName, (cert, chain) =>
             {
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                 chain.Build(cert);
@@ -64,10 +53,7 @@ namespace WinTrustSharp_Tests
         [Fact]
         public void VerifyFull_Callback_ValidFile_ForcedFailure_ReturnsFalse()
         {
-            var path = GetTestFile(ValidFileName);
-            EnsureExists(path);
-
-            bool result = Authenticode.VerifyFull(path, (_, _) => false);
+            bool result = Authenticode.VerifyFull(ValidFileName, (_, _) => false);
             Assert.False(result);
         }
 
@@ -76,30 +62,21 @@ namespace WinTrustSharp_Tests
         [Fact]
         public void Verify_InvalidFile_ReturnsFalse()
         {
-            var path = GetTestFile(InvalidFileName);
-            EnsureExists(path);
-
-            Assert.False(Authenticode.Verify(new FileInfo(path)));
+            Assert.False(Authenticode.Verify(new FileInfo(InvalidFileName)));
         }
 
         [Fact]
         public void VerifyFull_InvalidFile_ReturnsFalse_DoesNotThrow()
         {
-            var path = GetTestFile(InvalidFileName);
-            EnsureExists(path);
-
-            bool result = Authenticode.VerifyFull(path);
+            bool result = Authenticode.VerifyFull(InvalidFileName);
             Assert.False(result); // Certificate loaded, but cert.Verify() failed.
         }
 
         [Fact]
         public void VerifyFull_Callback_InvalidFile_CallbackSeesCert_ReturnsFalse()
         {
-            var path = GetTestFile(InvalidFileName);
-            EnsureExists(path);
-
             bool callbackInvoked = false;
-            bool result = Authenticode.VerifyFull(path, (cert, chain) =>
+            bool result = Authenticode.VerifyFull(InvalidFileName, (cert, chain) =>
             {
                 callbackInvoked = true;
                 chain.Build(cert); // Likely fails, we force false anyway.
@@ -115,28 +92,19 @@ namespace WinTrustSharp_Tests
         [Fact]
         public void Verify_NoCertFile_ReturnsFalse()
         {
-            var path = GetTestFile(NoCertFileName);
-            EnsureExists(path);
-
-            Assert.False(Authenticode.Verify(new FileInfo(path)));
+            Assert.False(Authenticode.Verify(new FileInfo(NoCertFileName)));
         }
 
         [Fact]
         public void VerifyFull_NoCertFile_ThrowsCryptographicException()
         {
-            var path = GetTestFile(NoCertFileName);
-            EnsureExists(path);
-
-            Assert.Throws<CryptographicException>(() => Authenticode.VerifyFull(path));
+            Assert.Throws<CryptographicException>(() => Authenticode.VerifyFull(NoCertFileName));
         }
 
         [Fact]
         public void VerifyFull_Callback_NoCertFile_ThrowsCryptographicException()
         {
-            var path = GetTestFile(NoCertFileName);
-            EnsureExists(path);
-
-            Assert.Throws<CryptographicException>(() => Authenticode.VerifyFull(path));
+            Assert.Throws<CryptographicException>(() => Authenticode.VerifyFull(NoCertFileName));
         }
     }
 }
