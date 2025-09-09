@@ -45,8 +45,7 @@ namespace WinTrustSharp.Internal
                     dwUIContext = 0,
                     pSignatureSettings = IntPtr.Zero
                 };
-                int ret = WinVerifyTrust(IntPtr.Zero, WINTRUST_ACTION_GENERIC_VERIFY_V2, ref trustData);
-                return ret == 0;
+                return WinVerifyTrust(IntPtr.Zero, WINTRUST_ACTION_GENERIC_VERIFY_V2, ref trustData) == 0;
             }
             finally
             {
